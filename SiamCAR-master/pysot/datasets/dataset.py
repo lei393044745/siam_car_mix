@@ -32,8 +32,8 @@ class SubDataset(object):
     def __init__(self, name, root, anno, frame_range, num_use, start_idx):
         cur_path = os.path.dirname(os.path.realpath(__file__))
         self.name = name
-        self.root = root
-        self.anno = os.path.join(cur_path, '../../', anno)
+        self.root = r'D:\py\HSI\siam_car_mix_data\crop511'
+        self.anno = r'D:\py\HSI\siam_car_mix_data\train.json'
         self.frame_range = frame_range
         self.num_use = num_use
         self.start_idx = start_idx

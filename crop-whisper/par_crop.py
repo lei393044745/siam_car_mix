@@ -8,7 +8,7 @@ import sys
 import time
 
 
-got10k_base_path = 'F:\GOT-10k'
+whispers_base_path = 'D:\BaiduNetdiskDownload\whispers'
 sub_sets = sorted({'train'})
 
 
@@ -66,14 +66,15 @@ def crop_like_SiamFC(image, bbox, context_amount=0.5, exemplar_size=127, instanc
 
 
 def crop_video(sub_set, video, crop_path, instanc_size):
-    video_crop_base_path = join(crop_path, sub_set, video)
-    if not exists(video_crop_base_path): makedirs(video_crop_base_path)
+    video_crop_base_path = join(crop_path, sub_set, video, 'RGB')
+    t = join(crop_path, sub_set, video)
+    if not exists(t): makedirs(t)
 
-    sub_set_base_path = join(got10k_base_path, sub_set)
+    sub_set_base_path = join(whispers_base_path, sub_set)
     video_base_path = join(sub_set_base_path, video)
-    gts_path = join(video_base_path, 'groundtruth.txt')
-    gts = np.loadtxt(open(gts_path, "rb"), delimiter=',')
-    jpgs = sorted(glob.glob(join(video_base_path, '*.jpg')))
+    gts_path = join(video_base_path,'RGB', 'groundtruth_rect.txt')
+    gts = np.loadtxt(open(gts_path, "rb"))
+    jpgs = sorted(glob.glob(join(video_base_path, 'RGB','*.jpg')))
 
     if not jpgs:
         print('no jpg files, try png files')
@@ -89,16 +90,16 @@ def crop_video(sub_set, video, crop_path, instanc_size):
         bbox = [bbox[0], bbox[1], bbox[0]+bbox[2], bbox[1]+bbox[3]]   # (xmin, ymin, xmax, ymax)
 
         z, x = crop_like_SiamFC(im, bbox, instanc_size=instanc_size, padding=avg_chans)
-        cv2.imwrite(join(video_crop_base_path, '{:06d}.{:02d}.z.jpg'.format(int(idx), 0)), z)
-        cv2.imwrite(join(video_crop_base_path, '{:06d}.{:02d}.x.jpg'.format(int(idx), 0)), x)
+        cv2.imwrite(join(t, '{:06d}.{:02d}.z.jpg'.format(int(idx), 0)), z)
+        cv2.imwrite(join(t, '{:06d}.{:02d}.x.jpg'.format(int(idx), 0)), x)
 
 
-def main(instanc_size=511, num_threads=24):
-    crop_path = '/data2/got10k/crop{:d}'.format(instanc_size)
+def main(instanc_size=511, num_threads=16):
+    crop_path = r'D:\py\HSI\siam_car_mix_data\crop{:d}'.format(instanc_size)
     if not exists(crop_path): makedirs(crop_path)
 
     for sub_set in sub_sets:
-        sub_set_base_path = join(got10k_base_path, sub_set)
+        sub_set_base_path = join(whispers_base_path, sub_set)
         videos = sorted(listdir(sub_set_base_path))
         n_videos = len(videos)
         with futures.ProcessPoolExecutor(max_workers=num_threads) as executor:

@@ -163,6 +163,12 @@ __C.DATASET.LaSOT.ANNO = 'train_dataset/lasot/train.json'
 __C.DATASET.LaSOT.FRAME_RANGE = 100
 __C.DATASET.LaSOT.NUM_USE = 100000
 
+__C.DATASET.Whispers = CN()
+__C.DATASET.Whispers.ROOT = 'train_dataset/whispers/crop511'         # LaSOT dataset path
+__C.DATASET.Whispers.ANNO = 'train_dataset/whispers/train.json'
+__C.DATASET.Whispers.FRAME_RANGE = 100
+__C.DATASET.Whispers.NUM_USE = 40
+
 __C.DATASET.VIDEOS_PER_EPOCH = 600000 #600000
 # ------------------------------------------------------------------------ #
 # Backbone options
