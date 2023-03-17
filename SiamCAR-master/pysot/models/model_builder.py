@@ -79,7 +79,8 @@ class ModelBuilder(nn.Module):
         search = data['search'].cuda()
         label_cls = data['label_cls'].cuda()
         label_loc = data['bbox'].cuda()
-
+        template_HSI = data['template_HSI'].cuda()
+        search_HSI = data['search_HSI'].cuda()
         # get feature
         zf = self.backbone(template)
         xf = self.backbone(search)
