@@ -17,14 +17,68 @@ from pysot.models.neck import get_neck
 from ..utils.location_grid import compute_locations
 from pysot.utils.xcorr import xcorr_depthwise
 
+
+class HSI_backbone(nn.Module):
+    def __init__(self):
+        super(HSI_backbone, self).__init__()
+        self.Block1 = nn.ModuleList([
+                nn.Conv3d(in_channels=1, out_channels=256,kernel_size=(3,3,3), stride=(2,2,2), bias=True),
+                nn.BatchNorm3d(256),
+                nn.ReLU(inplace=True),
+                nn.Conv3d(in_channels=256, out_channels=256,kernel_size=(1,3,3), stride=(1,2,2), bias=True),
+                nn.BatchNorm3d(256),
+                nn.ReLU(inplace=True),
+                nn.Conv3d(in_channels=256, out_channels=256,kernel_size=(3,3,3), stride=(2,2,2), bias=True),
+                nn.BatchNorm3d(256),
+                nn.ReLU(inplace=True),
+            ]
+        )
+        self.conv2_1 = nn.ModuleList([
+            nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(1,1,1), stride=(1,1,1),bias=True),
+            nn.BatchNorm3d(256),
+            nn.ReLU(inplace=True)
+        ])
+        self.conv2_2 = nn.ModuleList([
+            nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(3,1,1), stride=(1,1,1),bias=True),
+            nn.BatchNorm3d(256),
+            nn.ReLU(inplace=True)
+        ])
+        
+        self.conv3_1 = nn.ModuleList([
+            nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(1,1,1), stride=(1,1,1),bias=True),
+            nn.BatchNorm3d(256),
+            nn.ReLU(inplace=True)
+        ])
+        self.conv3_2 = nn.ModuleList([
+            nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(3,1,1), stride=(1,1,1),bias=True),
+            nn.BatchNorm3d(256),
+            nn.ReLU(inplace=True)
+        ])
+
+
+    def itr_module_list(self, x, net):
+        for m in net:
+            x = m(x)
+        return x
+
+    def forward(self, x):
+        x = x.unsqueeze(1)
+        x = self.itr_module_list(x, self.Block1)
+        x1 = self.itr_module_list(x, self.conv2_1) + self.itr_module_list(x, self.conv2_2)
+        x2 = self.itr_module_list(x1, self.conv3_1) + self.itr_module_list(x1, self.conv3_2)
+        if x1.size(3) < 20:
+            x1 = x1[:, :, :,4:11, 4:11]
+            x2 = x2[:, :, :,4:11, 4:11]
+        return [x1,x2]
+
+
 class ModelBuilder(nn.Module):
     def __init__(self):
         super(ModelBuilder, self).__init__()
 
-        # build backbone
+        # build backbon
         self.backbone = get_backbone(cfg.BACKBONE.TYPE,
                                      **cfg.BACKBONE.KWARGS)
-
         # build adjust layer
         if cfg.ADJUST.ADJUST:
             self.neck = get_neck(cfg.ADJUST.TYPE,
@@ -40,6 +94,10 @@ class ModelBuilder(nn.Module):
         self.loss_evaluator = make_siamcar_loss_evaluator(cfg)
 
         self.down = nn.ConvTranspose2d(256 * 3, 256, 1, 1)
+
+        self.backbone_HSI = HSI_backbone()
+
+        self.h_down = nn.ConvTranspose2d(256 * 6, 256, 1, 1)
 
     def template(self, z):
         zf = self.backbone(z)
@@ -81,7 +139,15 @@ class ModelBuilder(nn.Module):
         label_loc = data['bbox'].cuda()
         template_HSI = data['template_HSI'].cuda()
         search_HSI = data['search_HSI'].cuda()
+        HSI_zf = self.backbone_HSI(template_HSI)
+        HSI_xf = self.backbone_HSI(search_HSI)
+        HSI_features = []
+        for i in range(len(HSI_xf)):
+            for j in range(HSI_xf[i].size(2)):
+                HSI_features.append(self.xcorr_depthwise(HSI_xf[i][:,:,j,:], HSI_zf[i][:,:,j,:]))
         # get feature
+        h_features = torch.cat(HSI_features, dim=1)
+        h_features = self.h_down(h_features)
         zf = self.backbone(template)
         xf = self.backbone(search)
         if cfg.ADJUST.ADJUST:
