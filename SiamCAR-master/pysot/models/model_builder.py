@@ -21,7 +21,7 @@ from pysot.utils.xcorr import xcorr_depthwise
 class HSI_backbone(nn.Module):
     def __init__(self):
         super(HSI_backbone, self).__init__()
-        self.Block1 = nn.ModuleList([
+        self.Block1 = nn.Sequential(
                 nn.Conv3d(in_channels=1, out_channels=256,kernel_size=(3,3,3), stride=(2,2,2), bias=True),
                 nn.BatchNorm3d(256),
                 nn.ReLU(inplace=True),
@@ -31,41 +31,37 @@ class HSI_backbone(nn.Module):
                 nn.Conv3d(in_channels=256, out_channels=256,kernel_size=(3,3,3), stride=(2,2,2), bias=True),
                 nn.BatchNorm3d(256),
                 nn.ReLU(inplace=True),
-            ]
+            
         )
-        self.conv2_1 = nn.ModuleList([
+        self.conv2_1 = nn.Sequential(
             nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(1,1,1), stride=(1,1,1),bias=True),
             nn.BatchNorm3d(256),
             nn.ReLU(inplace=True)
-        ])
-        self.conv2_2 = nn.ModuleList([
+        )
+        self.conv2_2 = nn.Sequential(
             nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(3,1,1), stride=(1,1,1),bias=True),
             nn.BatchNorm3d(256),
             nn.ReLU(inplace=True)
-        ])
+        )
         
-        self.conv3_1 = nn.ModuleList([
+        self.conv3_1 = nn.Sequential(
             nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(1,1,1), stride=(1,1,1),bias=True),
             nn.BatchNorm3d(256),
             nn.ReLU(inplace=True)
-        ])
-        self.conv3_2 = nn.ModuleList([
+        )
+        self.conv3_2 = nn.Sequential(
             nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(3,1,1), stride=(1,1,1),bias=True),
             nn.BatchNorm3d(256),
             nn.ReLU(inplace=True)
-        ])
+        )
 
 
-    def itr_module_list(self, x, net):
-        for m in net:
-            x = m(x)
-        return x
 
     def forward(self, x):
         x = x.unsqueeze(1)
-        x = self.itr_module_list(x, self.Block1)
-        x1 = self.itr_module_list(x, self.conv2_1) + self.itr_module_list(x, self.conv2_2)
-        x2 = self.itr_module_list(x1, self.conv3_1) + self.itr_module_list(x1, self.conv3_2)
+        x = self.Block1(x)
+        x1 = self.conv2_1(x) + self.conv2_2(x)
+        x2 = self.conv3_1(x1) + self.conv3_2(x1)
         if x1.size(3) < 20:
             x1 = x1[:, :, :,4:11, 4:11]
             x2 = x2[:, :, :,4:11, 4:11]
