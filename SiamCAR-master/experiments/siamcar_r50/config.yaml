@@ -4,7 +4,7 @@ BACKBONE:
     TYPE: "resnet50"
     KWARGS:
         used_layers: [2, 3, 4]
-    PRETRAINED: ''
+    PRETRAINED: 'D:\\py\\HSI\\siam_car_mix_data\\got10k_model.pth' #'D:\\py\\HSI\\siam_car_mix_data\\resnet50.model'
     TRAIN_LAYERS: ['layer2','layer3','layer4']
     TRAIN_EPOCH: 10
     LAYERS_LR: 0.1
@@ -30,7 +30,7 @@ TRACK:
 TRAIN:
     EPOCH: 20
     START_EPOCH: 0
-    BATCH_SIZE: 8 # 32
+    BATCH_SIZE: 4 # 32
     BASE_LR: 0.005
     CLS_WEIGHT: 1.0
     LOC_WEIGHT: 3.0

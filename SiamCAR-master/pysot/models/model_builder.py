@@ -16,7 +16,7 @@ from pysot.models.head.car_head import CARHead
 from pysot.models.neck import get_neck
 from ..utils.location_grid import compute_locations
 from pysot.utils.xcorr import xcorr_depthwise
-
+from .vit import TSM
 
 class HSI_backbone(nn.Module):
     def __init__(self):
@@ -95,6 +95,8 @@ class ModelBuilder(nn.Module):
 
         self.h_down = nn.ConvTranspose2d(256 * 6, 256, 1, 1)
 
+        self.TSM = TSM()
+
     def template(self, z):
         zf = self.backbone(z)
         if cfg.ADJUST.ADJUST:
@@ -156,7 +158,7 @@ class ModelBuilder(nn.Module):
             features_new = self.xcorr_depthwise(xf[i+1],zf[i+1])
             features = torch.cat([features,features_new],1)
         features = self.down(features)
-
+        features = self.TSM(features, h_features)
         cls, loc, cen = self.car_head(features)
         locations = compute_locations(cls, cfg.TRACK.STRIDE)
         cls = self.log_softmax(cls)
