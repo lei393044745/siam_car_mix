@@ -17,6 +17,7 @@ from pysot.models.neck import get_neck
 from ..utils.location_grid import compute_locations
 from pysot.utils.xcorr import xcorr_depthwise
 from .vit import TSM
+import math
 
 class HSI_backbone(nn.Module):
     def __init__(self):
@@ -31,7 +32,6 @@ class HSI_backbone(nn.Module):
                 nn.Conv3d(in_channels=256, out_channels=256,kernel_size=(3,3,3), stride=(2,2,2), bias=True),
                 nn.BatchNorm3d(256),
                 nn.ReLU(inplace=True),
-            
         )
         self.conv2_1 = nn.Sequential(
             nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(1,1,1), stride=(1,1,1),bias=True),
@@ -43,7 +43,6 @@ class HSI_backbone(nn.Module):
             nn.BatchNorm3d(256),
             nn.ReLU(inplace=True)
         )
-        
         self.conv3_1 = nn.Sequential(
             nn.Conv3d(in_channels=256, out_channels=256, kernel_size=(1,1,1), stride=(1,1,1),bias=True),
             nn.BatchNorm3d(256),
@@ -54,8 +53,13 @@ class HSI_backbone(nn.Module):
             nn.BatchNorm3d(256),
             nn.ReLU(inplace=True)
         )
-
-
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.kernel_size[2] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm3d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
 
     def forward(self, x):
         x = x.unsqueeze(1)

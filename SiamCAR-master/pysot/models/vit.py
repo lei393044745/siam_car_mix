@@ -1,6 +1,7 @@
 import torch
 from timm.models.layers import DropPath
 from torch import nn
+import logging
 
 
 class TSM(nn.Module):
@@ -9,6 +10,7 @@ class TSM(nn.Module):
         self.tsm = nn.ModuleList([
             Block(dim = 256, num_heads = 8) for _ in range(8)
         ])
+        self.apply(self._init_weights_xavier)
 
     def forward(self,RGB_features, HSI_features):
         b, c, h, w = RGB_features.shape
@@ -17,8 +19,19 @@ class TSM(nn.Module):
         f = torch.cat([rgb_f, hsi_f], dim=2).permute(0,2,1)
         for blcok in self.tsm:
             f = blcok(f, h, w, h, w)
-        f = f[:,:h*w,:].permute(0,2,1).reshape(b,c,h,w)
+        f = f[:,h*w:,:].permute(0,2,1).reshape(b,c,h,w)
         return f
+    
+    def _init_weights_xavier(self, m):
+        if isinstance(m, nn.Linear):
+            logging.info('=> init weight of Linear from xavier uniform')
+            nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                logging.info('=> init bias of Linear to zeros')
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, (nn.LayerNorm, nn.BatchNorm2d)):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
 
 
 
