@@ -107,17 +107,29 @@ class ModelBuilder(nn.Module):
             zf = self.neck(zf)
         self.zf = zf
 
-    def track(self, x):
+    def extract_his(self, hsi):
+        t_hsi_f = self.backbone_HSI(hsi)
+        self.t_hsi_f = t_hsi_f
+
+    def track(self, x, hsi_x_crop):
         xf = self.backbone(x)
+        hsi_xf = self.backbone_HSI(hsi_x_crop)
         if cfg.ADJUST.ADJUST:
             xf = self.neck(xf)
 
+        HSI_features = []
+        for i in range(len(hsi_xf)):
+            for j in range(hsi_xf[i].size(2)):
+                HSI_features.append(self.xcorr_depthwise(hsi_xf[i][:,:,j,:], self.t_hsi_f[i][:,:,j,:]))
+        # get feature
+        h_features = torch.cat(HSI_features, dim=1)
+        h_features = self.h_down(h_features)
         features = self.xcorr_depthwise(xf[0],self.zf[0])
         for i in range(len(xf)-1):
             features_new = self.xcorr_depthwise(xf[i+1],self.zf[i+1])
             features = torch.cat([features,features_new],1)
         features = self.down(features)
-
+        features = self.TSM(features, h_features)
         cls, loc, cen = self.car_head(features)
         return {
                 'cls': cls,

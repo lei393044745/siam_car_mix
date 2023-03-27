@@ -8,7 +8,7 @@ from __future__ import unicode_literals
 import numpy as np
 import torch.nn.functional as F
 import cv2
-
+import torch
 from pysot.core.config import cfg
 from pysot.tracker.base_tracker import SiameseTracker
 from pysot.utils.misc import bbox_clip
@@ -26,12 +26,70 @@ class SiamCARTracker(SiameseTracker):
         cls = F.softmax(cls[:,:,:,:], dim=1).data[:,1,:,:].cpu().numpy()
         return cls
 
-    def init(self, img, bbox):
+    def X2Cube(self, img,B=[4, 4],skip = [4, 4],bandNumber=16):
+        img = cv2.imread(img, -1)
+        # Parameters
+        M, N = img.shape
+        col_extent = N - B[1] + 1
+        row_extent = M - B[0] + 1
+        # Get Starting block indices
+        start_idx = np.arange(B[0])[:, None] * N + np.arange(B[1])
+        # Generate Depth indeces
+        didx = M * N * np.arange(1)
+        start_idx = (didx[:, None] + start_idx.ravel()).reshape((-1, B[0], B[1]))
+        # Get offsetted indices across the height and width of input array
+        offset_idx = np.arange(row_extent)[:, None] * N + np.arange(col_extent)
+        # Get all actual indices & index into input array for final output
+        out = np.take(img, start_idx.ravel()[:, None] + offset_idx[::skip[0], ::skip[1]].ravel())
+        out = np.transpose(out)
+        DataCube = out.reshape(M//4, N//4,bandNumber )
+        return DataCube
+    
+    def crop_hwc(self, image, bbox, out_sz, padding=(0, 0, 0)):
+        a = (out_sz-1) / (bbox[2]-bbox[0])
+        b = (out_sz-1) / (bbox[3]-bbox[1])
+        c = -a * bbox[0]
+        d = -b * bbox[1]
+        mapping = np.array([[a, 0, c],
+                            [0, b, d]]).astype(np.float)
+        crop = [cv2.warpAffine(image[:, :, i], 
+                               mapping, 
+                               (out_sz, out_sz), 
+                               borderMode=cv2.BORDER_CONSTANT, 
+                               borderValue=(float(padding[i]),float(padding[i]),float(padding[i]))) for i in range(image.shape[2])]
+        return np.stack(crop, axis=0)
+
+
+    def pos_s_2_bbox(self, pos, s):
+        return [pos[0]-s/2, pos[1]-s/2, pos[0]+s/2, pos[1]+s/2]
+
+
+    def crop_like_SiamFC(self, image, bbox, context_amount=0.5, exemplar_size=127, instanc_size=255, padding=(0, 0, 0)):
+        bbox = [bbox[0], bbox[1], bbox[0]+bbox[2], bbox[1]+bbox[3]]
+        target_pos = [(bbox[2]+bbox[0])/2., (bbox[3]+bbox[1])/2.]
+        target_size = [bbox[2]-bbox[0], bbox[3]-bbox[1]]   # width, height
+        wc_z = target_size[1] + context_amount * sum(target_size)
+        hc_z = target_size[0] + context_amount * sum(target_size)
+        s_z = np.sqrt(wc_z * hc_z)
+        scale_z = exemplar_size / s_z
+        d_search = (instanc_size - exemplar_size) / 2
+        pad = d_search / scale_z
+        s_x = s_z + 2 * pad
+
+        z = self.crop_hwc(image, self.pos_s_2_bbox(target_pos, s_z), exemplar_size, padding=np.mean(image, axis=(0, 1)))
+        x = self.crop_hwc(image, self.pos_s_2_bbox(target_pos, s_x), instanc_size, padding=np.mean(image, axis=(0, 1)))
+        return z, x
+    
+
+    def init(self, img, bbox, hsi, hsi_box):
         """
         args:
             img(np.ndarray): BGR image
             bbox: (x, y, w, h) bbox
         """
+        img = cv2.imread(img)
+        hsi_img = self.X2Cube(hsi).astype(np.float32)
+        # hsi_img = torch.from_numpy(self.crop_like_SiamFC(hsi_img, hsi_box)[0]).cuda()
         self.center_pos = np.array([bbox[0]+(bbox[2]-1)/2,
                                     bbox[1]+(bbox[3]-1)/2])
         self.size = np.array([bbox[2], bbox[3]])
@@ -43,12 +101,17 @@ class SiamCARTracker(SiameseTracker):
 
         # calculate channle average
         self.channel_average = np.mean(img, axis=(0, 1))
-
+        self.hsi_channel_average = np.mean(hsi_img, axis=(0, 1))
+        
         # get crop
         z_crop = self.get_subwindow(img, self.center_pos,
                                     cfg.TRACK.EXEMPLAR_SIZE,
                                     s_z, self.channel_average)
+        hsi_img = self.get_subwindow(hsi_img, self.center_pos,
+                                     cfg.TRACK.EXEMPLAR_SIZE,
+                                     s_z, self.hsi_channel_average)
         self.model.template(z_crop)
+        self.model.extract_his(hsi_img)
 
     def change(self,r):
         return np.maximum(r, 1. / r)
@@ -104,13 +167,14 @@ class SiamCARTracker(SiameseTracker):
         new_cy = disp_ori[0] + self.center_pos[1]
         return max_r_up, max_c_up, new_cx, new_cy
 
-    def track(self, img, hp):
+    def track(self, img, hp, hsi_img):
         """
         args:
             img(np.ndarray): BGR image
         return:
             bbox(list):[x, y, width, height]
         """
+        hsi_img = self.X2Cube(hsi_img)
         w_z = self.size[0] + cfg.TRACK.CONTEXT_AMOUNT * np.sum(self.size)
         h_z = self.size[1] + cfg.TRACK.CONTEXT_AMOUNT * np.sum(self.size)
         s_z = np.sqrt(w_z * h_z)
@@ -119,8 +183,11 @@ class SiamCARTracker(SiameseTracker):
         x_crop = self.get_subwindow(img, self.center_pos,
                                     cfg.TRACK.INSTANCE_SIZE,
                                     round(s_x), self.channel_average)
+        hsi_x_crop = self.get_subwindow(hsi_img, self.center_pos,
+                                    cfg.TRACK.INSTANCE_SIZE,
+                                    round(s_x), self.hsi_channel_average)
 
-        outputs = self.model.track(x_crop)
+        outputs = self.model.track(x_crop, hsi_x_crop)
         cls = self._convert_cls(outputs['cls']).squeeze()
         cen = outputs['cen'].data.cpu().numpy()
         cen = (cen - cen.min()) / cen.ptp()

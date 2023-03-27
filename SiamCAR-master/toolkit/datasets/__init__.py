@@ -2,6 +2,7 @@ from .otb import OTBDataset
 from .uav import UAVDataset
 from .lasot import LaSOTDataset
 from .got10k import GOT10kDataset
+from .whispers import Whispers
 
 class DatasetFactory(object):
     @staticmethod
@@ -25,6 +26,8 @@ class DatasetFactory(object):
             dataset = UAVDataset(**kwargs)
         elif 'GOT-10k' == name:
             dataset = GOT10kDataset(**kwargs)
+        elif 'Whispers' == name:
+            dataset = Whispers('D:\\BaiduNetdiskDownload\\whispers', subset='test', type='HSI')
         else:
             raise Exception("unknow dataset {}".format(kwargs['name']))
         return dataset

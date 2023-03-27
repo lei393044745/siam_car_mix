@@ -28,11 +28,11 @@ parser = argparse.ArgumentParser(description='siamcar tracking')
 
 parser.add_argument('--video', default='', type=str,
         help='eval one special video')
-parser.add_argument('--dataset', type=str, default='UAV123',
+parser.add_argument('--dataset', type=str, default='Whispers',
         help='datasets')#OTB100 LaSOT UAV123 GOT-10k
-parser.add_argument('--vis', action='store_true',default=False,
+parser.add_argument('--vis', action='store_true',default=True,
         help='whether visualzie result')
-parser.add_argument('--snapshot', type=str, default='snapshot/checkpoint_e20.pth',
+parser.add_argument('--snapshot', type=str, default=r'D:\py\HSI\siam_car_mix_data\got10k_model.pth',
         help='snapshot of models to eval')
 
 parser.add_argument('--config', type=str, default='../experiments/siamcar_r50/config.yaml',
@@ -67,27 +67,28 @@ def main():
                                             dataset_root=dataset_root,
                                             load_img=False)
 
-    model_name = args.snapshot.split('/')[-2] + str(hp['lr']) + '_' + str(hp['penalty_k']) + '_' + str(hp['window_lr'])
+    model_name = args.snapshot.split('\\')[-2] + str(hp['lr']) + '_' + str(hp['penalty_k']) + '_' + str(hp['window_lr'])
 
     # OPE tracking
     for v_idx, video in enumerate(dataset):
-        if args.video != '':
-            # test one special video
-            if video.name != args.video:
-                continue
+        # if args.video != '':
+        #     # test one special video
+        #     if video.name != args.video:
+        #         continue
         toc = 0
         pred_bboxes = []
         track_times = []
-        for idx, (img, gt_bbox) in enumerate(video):
+        for idx, (img, gt_bbox, hsi, hsi_box) in enumerate(zip(video[0], video[1], video[2], video[3])):
             tic = cv2.getTickCount()
             if idx == 0:
                 cx, cy, w, h = get_axis_aligned_bbox(np.array(gt_bbox))
                 gt_bbox_ = [cx-(w-1)/2, cy-(h-1)/2, w, h]
-                tracker.init(img, gt_bbox_)
+                tracker.init(img, gt_bbox_, hsi, hsi_box)
                 pred_bbox = gt_bbox_
                 pred_bboxes.append(pred_bbox)
             else:
-                outputs = tracker.track(img, hp)
+                img = cv2.imread(img)
+                outputs = tracker.track(img, hp, hsi)
                 pred_bbox = outputs['bbox']
                 pred_bboxes.append(pred_bbox)
             toc += cv2.getTickCount() - tic
@@ -103,19 +104,19 @@ def main():
                     cv2.rectangle(img, (pred_bbox[0], pred_bbox[1]),
                                   (pred_bbox[0]+pred_bbox[2], pred_bbox[1]+pred_bbox[3]), (0, 255, 255), 3)
                     cv2.putText(img, str(idx), (40, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-                    cv2.imshow(video.name, img)
+                    cv2.imshow('whisper', img)
                     cv2.waitKey(1)
         toc /= cv2.getTickFrequency()
         # save results
         model_path = os.path.join('results', args.dataset, model_name)
         if not os.path.isdir(model_path):
             os.makedirs(model_path)
-        result_path = os.path.join(model_path, '{}.txt'.format(video.name))
+        result_path = os.path.join(model_path, '{}.txt'.format(video[4]))
         with open(result_path, 'w') as f:
             for x in pred_bboxes:
                 f.write(','.join([str(i) for i in x])+'\n')
         print('({:3d}) Video: {:12s} Time: {:5.1f}s Speed: {:3.1f}fps'.format(
-            v_idx+1, video.name, toc, idx / toc))
+            v_idx+1, video[4], toc, idx / toc))
     os.chdir(model_path)
     save_file = '../%s' % dataset
     shutil.make_archive(save_file, 'zip')

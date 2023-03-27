@@ -269,3 +269,5 @@ __C.HP_SEARCH.GOT10K = [0.7, 0.06, 0.1]
 __C.HP_SEARCH.UAV123 = [0.4, 0.2, 0.3]
 
 __C.HP_SEARCH.LaSOT = [0.33, 0.04, 0.3]
+
+__C.HP_SEARCH.Whispers = [0.35, 0.2, 0.45]
